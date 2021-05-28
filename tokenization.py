@@ -178,12 +178,18 @@ class FullTokenizer(object):
 
     return split_tokens
 
+  def convert_tokens_to_ids(self, tokens):
+    return convert_by_vocab(self.vocab, tokens)
+
+  def convert_ids_to_tokens(self, ids):
+    return convert_by_vocab(self.inv_vocab, ids)
+
+
 class BasicTokenizer(object):
   """Runs basic tokenization (punctuation splitting, lower casing, etc.)."""
 
   def __init__(self, do_lower_case=True):
     """Constructs a BasicTokenizer.
-
     Args:
       do_lower_case: Whether to lower case the input.
     """
@@ -303,18 +309,14 @@ class WordpieceTokenizer(object):
 
   def tokenize(self, text):
     """Tokenizes a piece of text into its word pieces.
-
     This uses a greedy longest-match-first algorithm to perform tokenization
     using the given vocabulary.
-
     For example:
       input = "unaffable"
       output = ["un", "##aff", "##able"]
-
     Args:
       text: A single token or whitespace separated tokens. This should have
         already been passed through `BasicTokenizer.
-
     Returns:
       A list of wordpiece tokens.
     """
@@ -393,6 +395,7 @@ def _is_punctuation(char):
   if cat.startswith("P"):
     return True
   return False
+
 
 class JumanPPTokenizer(BasicTokenizer):
   def __init__(self):
