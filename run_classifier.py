@@ -28,6 +28,10 @@ import tensorflow as tf
 
 import pandas as pd
 
+label_list = None
+tokenizer = None
+estimator = None
+
 flags = tf.flags
 
 FLAGS = flags.FLAGS
@@ -855,7 +859,10 @@ def main(_):
 
   processor = processors[task_name]()
 
+  global label_list
   label_list = processor.get_labels()
+
+  global tokenizer
 
   tokenizer = tokenization.FullTokenizer(
       vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
@@ -897,6 +904,7 @@ def main(_):
 
   # If TPU is not available, this will fall back to normal Estimator on CPU
   # or GPU.
+  global estimator
   estimator = tf.contrib.tpu.TPUEstimator(
       use_tpu=FLAGS.use_tpu,
       model_fn=model_fn,
@@ -1011,6 +1019,47 @@ def main(_):
         writer.write(output_line)
         num_written_lines += 1
     assert num_written_lines == num_actual_predict_examples
+
+  app.run(host='0.0.0.0')
+
+
+app = Flask(__name__)
+app.config['JSON_AS_ASCII'] = False
+
+
+@app.route('/predict', methods=['POST'])
+def predict():
+  if request.method == 'POST':
+    request_json = request.get_json()
+    if "texts" in request_json:
+
+      predict_examples = create_examples(request_json["texts"])
+
+      num_actual_predict_examples = len(predict_examples)
+
+      predict_file = os.path.join(FLAGS.output_dir, "predict.tf_record")
+      file_based_convert_examples_to_features(predict_examples, label_list,
+                                              FLAGS.max_seq_length, tokenizer,
+                                              predict_file)
+
+      predict_drop_remainder = True if FLAGS.use_tpu else False
+      predict_input_fn = file_based_input_fn_builder(
+          input_file=predict_file,
+          seq_length=FLAGS.max_seq_length,
+          is_training=False,
+          drop_remainder=predict_drop_remainder)
+
+      result = estimator.predict(input_fn=predict_input_fn)
+
+      probabilities_all_list = []
+
+      for (i, prediction) in enumerate(result):
+        prob_list = {}
+        for j, prediction_one in enumerate(prediction["probabilities"]):
+          prob_list[j+4] = float(str(prediction_one))
+        probabilities_all_list.append(prob_list)
+
+      return jsonify(probabilities_all_list)
 
 
 if __name__ == "__main__":
