@@ -27,6 +27,7 @@ import tokenization
 import tensorflow as tf
 
 import pandas as pd
+from flask import Flask, request, json, jsonify
 
 label_list = None
 tokenizer = None
@@ -80,6 +81,10 @@ flags.DEFINE_bool("do_eval", False, "Whether to run eval on the dev set.")
 flags.DEFINE_bool(
     "do_predict", False,
     "Whether to run the model in inference mode on the test set.")
+
+flags.DEFINE_bool(
+    "do_serve", False,
+    "Whether to run the model in serve mode")
 
 flags.DEFINE_integer("train_batch_size", 32, "Total batch size for training.")
 
@@ -823,6 +828,16 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
     features.append(feature)
   return features
 
+def create_examples(lines, set_type="test"):
+  """Creates examples for the training and dev sets."""
+  examples = []
+  for (i, line) in enumerate(lines):
+    guid = "%s-%s" % (set_type, i)
+    text_a = tokenization.convert_to_unicode(line)
+    label = tokenization.convert_to_unicode("0")
+    examples.append(
+        InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
+  return examples
 
 def main(_):
   tf.logging.set_verbosity(tf.logging.INFO)
@@ -838,7 +853,7 @@ def main(_):
   tokenization.validate_case_matches_checkpoint(FLAGS.do_lower_case,
                                                 FLAGS.init_checkpoint)
 
-  if not FLAGS.do_train and not FLAGS.do_eval and not FLAGS.do_predict:
+  if not FLAGS.do_train and not FLAGS.do_eval and not FLAGS.do_predict and not FLAGS.do_serve:
     raise ValueError(
         "At least one of `do_train`, `do_eval` or `do_predict' must be True.")
 
@@ -1020,7 +1035,8 @@ def main(_):
         num_written_lines += 1
     assert num_written_lines == num_actual_predict_examples
 
-  app.run(host='0.0.0.0')
+  if FLAGS.do_serve:
+    app.run(host='0.0.0.0',port=6006, use_reloader=False, threaded=False)
 
 
 app = Flask(__name__)
@@ -1056,7 +1072,7 @@ def predict():
       for (i, prediction) in enumerate(result):
         prob_list = {}
         for j, prediction_one in enumerate(prediction["probabilities"]):
-          prob_list[j+4] = float(str(prediction_one))
+          prob_list[j] = float(str(prediction_one))
         probabilities_all_list.append(prob_list)
 
       return jsonify(probabilities_all_list)
